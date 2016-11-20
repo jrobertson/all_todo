@@ -10,8 +10,12 @@ class AllTodo
 
   def initialize(s)
 
+    # remove the file heading     
+    lines = s.lines
+    lines.shift 3
+    
     declaration = '<?ph schema="sections[title]/section[x]"?>'
-    @px = PolyrexHeadings.new(declaration + "\n" + s).to_polyrex
+    @px = PolyrexHeadings.new(declaration + "\n" + lines.join).to_polyrex
 
   end
 
