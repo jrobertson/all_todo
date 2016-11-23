@@ -9,18 +9,41 @@ require 'polyrex-headings'
 
 class AllTodo
 
-  def initialize(s)
+  def initialize(raw_s)
+    
+    s, _ = RXFHelper.read(raw_s)
 
     # remove the file heading     
     lines = s.lines
     lines.shift 3
     
-    @fields = %w(todo when duration priority)
+    @fields = %w(todo when duration priority status note tags)
     declar = "<?ph schema='sections[title]/section[#{@fields.join(',')}]'" + 
         " format_masks[0]='[!todo]'?>"
 
     @px = PolyrexHeadings.new(declar + "\n" + lines.join).to_polyrex
+    
+    @px.each_recursive do |x, parent|
 
+      todo = x.todo
+      raw_status = todo.slice!(/\[.*\]\s+/)
+      x.todo = todo
+      
+      status  = raw_status =~ /\[\s*x\s*\]/ ? 'done' : ''      
+      x.status = status
+            
+      # is there a note?
+      
+      note = todo[/^note:\s+(.*)/i,1]
+      
+      if note and parent.is_a? PolyrexObjects::Section then
+        
+        parent.note = note
+        x.delete
+          
+      end
+      
+    end        
 
   end
   
@@ -38,6 +61,7 @@ class AllTodo
   end
   
   alias breakdown detail
+  
   
   def parse_detail(s)
     
