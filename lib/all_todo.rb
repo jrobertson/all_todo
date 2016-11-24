@@ -69,19 +69,20 @@ class AllTodo
   
   def detail()
     
-    doc = Rexle.new(@px.to_xml)
-    a = scan doc.root.element('records')
-    lines = scan_print a
+    lines = []
     
-    filename = 'all_todo_detail.txt'
-    heading = [filename, '=' * filename.length, '', ''].join("\n")
-    
-    heading + lines.join("\n")    
+    @px.each_recursive do |item, parent, level, i|
+
+      lines << item.to_h.map {|k,v| "%s%s: %s" % ['  ' * level, k, v]}.join("\n")
+      lines << ['']
+      
+    end    
+   
+    ([s='all_todo_detail.txt', '=' * s.length, '', ''] + lines).join("\n")
     
   end
   
-  alias breakdown detail
-  
+  alias breakdown detail  
   
   def parse_detail(s)
     
@@ -112,7 +113,7 @@ class AllTodo
         lines << "%s %s" % ['#' * (level+1), x.heading]
         offset_level = -(level + 1)
         
-        lines.last << ' # ' + x.tags if x.tags
+        lines.last << ' # ' + x.tags if x.tags.length > 0
 
       else
         
@@ -136,45 +137,6 @@ class AllTodo
     
     ([title, '=' * title.length] + lines[1..-1]).join("\n")    
 
-  end
-  
-  private
-  
-  
-  def scan(node)
-
-    node.elements.map do |section|
-
-      summary = section.xpath('summary').map do |x|
-        @fields.map {|y| x.text(y)}
-      end
-
-      summary + scan(section.element('records'))
-    end
-  end
-
-  def scan_print(a, indent=0)
-
-    lines = []
-
-    a.each do |row_children|
-
-      row = row_children.shift
-      
-      @fields.zip(row).each do |col|
-
-        label, value = col
-        lines << '  ' * indent + [label, value].join(': ')
-        
-      end
-
-      lines << "\n"
-
-      lines.concat scan_print(row_children, indent+1) if row_children.any?
-
-    end
-
-    lines
   end
   
 end
