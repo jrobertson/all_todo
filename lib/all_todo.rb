@@ -96,6 +96,45 @@ class AllTodo
     @px
   end
   
+  def to_s()
+    
+    title = 'all_todo.txt'
+    
+    lines = [title, '=' * title.length]
+    offset_level = 0
+    
+    @px.each_recursive do |x, parent, level, i|
+
+      # is it a heading?
+      
+      if x.heading.length > 0 then
+        
+        lines << ''
+        lines << "%s %s" % ['#' * (level+1), x.heading]
+        offset_level = -(level + 1)
+
+      else
+        
+        relative_level = level + offset_level
+        indent = '  ' * relative_level
+        
+        status = x.status == 'done' ? 'x' : ' '
+        todo = "%s[%s] %s" % [indent, status, x.todo]
+        lines << '' if i == 0 and parent.heading.length > 0
+        lines << todo
+        
+        lines << 'Note: ' + x.note + "\n" if x.note.length > 0
+        
+      end
+
+    end
+    
+    lines << ['', '']
+
+    lines.join("\n")    
+
+  end
+  
   private
   
   
