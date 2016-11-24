@@ -17,15 +17,20 @@ class AllTodo
     lines = s.lines
     lines.shift 3
     
-    @fields = %w(todo when duration priority status note tags)
+    @fields = %w( todo heading when duration priority status note tags)
     declar = "<?ph schema='sections[title]/section[#{@fields.join(',')}]'" + 
         " format_masks[0]='[!todo]'?>"
 
-    @px = PolyrexHeadings.new(declar + "\n" + lines.join).to_polyrex
+    # add a marker to identify the headings after parsing the records
     
-    @px.each_recursive do |x, parent|
+    s2 = lines.join.gsub(/^#+\s+/,'\0:')
+    
+    @px = PolyrexHeadings.new(declar + "\n" + s2).to_polyrex
+    
+    @px.each_recursive do |x, parent, level|
 
       todo = x.todo
+
       raw_status = todo.slice!(/\[.*\]\s+/)
       x.todo = todo
       
@@ -41,6 +46,21 @@ class AllTodo
         parent.note = note
         x.delete
           
+      end
+      
+      # is it a heading?
+      
+      heading = todo[/^:(.*)/,1]
+      
+      if heading then
+
+        # does the heading contain tags?
+        
+        raw_tags = heading.slice!(/\s+#.*$/)
+        x.tags = raw_tags[/#\s+(.*)/,1] if raw_tags
+        x.heading = heading
+        x.todo = ''        
+        
       end
       
     end        
