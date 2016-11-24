@@ -98,9 +98,7 @@ class AllTodo
   
   def to_s()
     
-    title = 'all_todo.txt'
-    
-    lines = [title, '=' * title.length]
+    lines = []
     offset_level = 0
     
     @px.each_recursive do |x, parent, level, i|
@@ -110,8 +108,11 @@ class AllTodo
       if x.heading.length > 0 then
         
         lines << ''
+        lines << '' if level == 0
         lines << "%s %s" % ['#' * (level+1), x.heading]
         offset_level = -(level + 1)
+        
+        lines.last << ' # ' + x.tags if x.tags
 
       else
         
@@ -123,7 +124,7 @@ class AllTodo
         lines << '' if i == 0 and parent.heading.length > 0
         lines << todo
         
-        lines << 'Note: ' + x.note + "\n" if x.note.length > 0
+        lines << "%s  Note: %s\n" % [indent, x.note] if x.note.length > 0
         
       end
 
@@ -131,7 +132,9 @@ class AllTodo
     
     lines << ['', '']
 
-    lines.join("\n")    
+    title = 'all_todo.txt'
+    
+    ([title, '=' * title.length] + lines[1..-1]).join("\n")    
 
   end
   
