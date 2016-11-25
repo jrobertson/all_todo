@@ -166,14 +166,23 @@ class AllTodo
       end
 
       status = x.status == 'done' ? 'x' : ' '
-      [a, "[%s] %s" % [status, x.title]]
-    end
+      
+      todo_lines = []
 
-    h = raw_rows.group_by(&:first)
+      todo_lines << "[%s] %s" % [status, x.title]
+
+      x.each_recursive do |item, parent, level|
+        n ||= level - 1
+        status = item.status == 'done' ? 'x' : ' '
+        todo_lines << "%s[%s] %s" % ['  ' * (level - n), status, item.title]
+      end
+      
+      [a, todo_lines.join("\n")]
+    end
 
     lines = []
 
-    h.each do |heading, items|
+    raw_rows.group_by(&:first).each do |heading, items|
       lines << heading.join("\n") << ''
       lines << items.map{|x| x[1..-1]}.join("\n") << ''
     end
