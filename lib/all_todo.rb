@@ -17,9 +17,9 @@ class AllTodo
     lines = s.lines
     lines.shift 3
     
-    @fields = %w( todo heading when duration priority status note tags)
-    declar = "<?ph schema='sections[title]/section[#{@fields.join(',')}]'" + 
-        " format_masks[0]='[!todo]'?>"
+    @fields = %w( title heading when duration priority status note tags)
+    declar = "<?ph schema='items[title]/todo[#{@fields.join(',')}]'" + 
+        " format_masks[0]='[!title]'?>"
 
     # add a marker to identify the headings after parsing the records
     
@@ -29,19 +29,25 @@ class AllTodo
     
     @px.each_recursive do |x, parent, level|
 
-      todo = x.todo
+      todo = x.title
+
+      # is the to-do item selected for action today?
+      today_item = todo.slice!(/^\*\s+/)
+      
+      x.when = 'today' if today_item
 
       raw_status = todo.slice!(/\[.*\]\s+/)
-      x.todo = todo
-      
+      x.title = todo
+
       status  = raw_status =~ /\[\s*x\s*\]/ ? 'done' : ''      
+
       x.status = status
             
       # is there a note?
       
       note = todo[/^note:\s+(.*)/i,1]
       
-      if note and parent.is_a? PolyrexObjects::Section then
+      if note and parent.is_a? PolyrexObjects::Todo then
         
         parent.note = note
         x.delete
@@ -59,7 +65,7 @@ class AllTodo
         raw_tags = heading.slice!(/\s+#.*$/)
         x.tags = raw_tags[/#\s+(.*)/,1] if raw_tags
         x.heading = heading
-        x.todo = ''        
+        x.title = ''        
         
       end
       
@@ -121,9 +127,13 @@ class AllTodo
         indent = '  ' * relative_level
         
         status = x.status == 'done' ? 'x' : ' '
-        todo = "%s[%s] %s" % [indent, status, x.todo]
+        
+        todo = []
+        todo << '* ' if x.when == 'today'
+        todo << "%s[%s] %s" % [indent, status, x.title]
+        
         lines << '' if i == 0 and parent.heading.length > 0
-        lines << todo
+        lines << todo.join
         
         lines << "%s  Note: %s\n" % [indent, x.note] if x.note.length > 0
         
@@ -137,6 +147,48 @@ class AllTodo
     
     ([title, '=' * title.length] + lines[1..-1]).join("\n")    
 
+  end
+
+  # prints out the to-do list for today
+  
+  def today(day='today')
+
+    px = @px    
+
+    raw_rows = px.find_all_by_todo_when(day).map do |x|
+
+      headings = fetch_heading(x.parent)
+
+      # print the headings
+
+      a = headings.reverse.map.with_index do |s, i|
+        "%s %s" % ['#'* (i+1), s]
+      end
+
+      status = x.status == 'done' ? 'x' : ' '
+      [a, "[%s] %s" % [status, x.title]]
+    end
+
+    h = raw_rows.group_by(&:first)
+
+    lines = []
+
+    h.each do |heading, items|
+      lines << heading.join("\n") << ''
+      lines << items.map{|x| x[1..-1]}.join("\n") << ''
+    end
+
+    filename = 'todo_daily.txt'
+    ([filename, '=' * filename.length, ''] + lines).join("\n")
+
+  end
+  
+  private
+
+  def fetch_heading(item, a=[])
+    a << item.heading
+    a.concat fetch_heading(item.parent) if item.parent?
+    a
   end
   
 end
