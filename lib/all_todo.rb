@@ -4,13 +4,14 @@
 
 
 require 'px_todo'
+require 'rexle-diff'
 
 
 class AllTodo < PxTodo
 
-  def initialize(raw_s)
+  def initialize(raw_s, filepath: '.')
     
-    super(raw_s) do |x|
+    super(raw_s, filepath: filepath) do |x|
       
       todo = x.title
 
@@ -41,6 +42,26 @@ class AllTodo < PxTodo
   
   alias breakdown detail  
   
+  # generates the todo_daily.txt file
+  
+  def export_today()
+    
+    ftxt, fxml, fnoidxml = %w(.txt .xml _noid.xml).map{|x| 'todo_daily' + x}
+    
+    File.write File.join(@filepath, ftxt), self.today()        
+    
+    a = self.to_px.find_all_by_todo_when 'today'
+
+    px = Polyrex.new(schema="items[title]/todo[#{@fields.join(', ')}]")
+    a.each {|x| px.add x }
+
+    File.write File.join(@filepath, fxml), px.to_xml(pretty: true)
+    
+    px.xpath('//todo').each {|x| x.attributes.delete :id}
+    File.write File.join(@filepath, fnoidxml), px.to_xml(pretty: true)
+    
+  end
+  
   def parse_detail(s)
     
     lines = s.lines
@@ -50,6 +71,11 @@ class AllTodo < PxTodo
 
   end
 
+  def save(filepath=File.join(@filepath, 'all_todo.xml'))
+
+    File.write filepath, @px.to_xml(pretty: true)
+
+  end
   
   def to_s()
     
@@ -99,7 +125,7 @@ class AllTodo < PxTodo
 
   # prints out the to-do list for today
   
-  def today(day='today')
+  def today(day='today', filename: 'todo_daily.txt')
 
     px = @px    
 
@@ -133,8 +159,45 @@ class AllTodo < PxTodo
       r << heading.join("\n") << '' << items.map{|x| x[1..-1]}.join("\n") << ''
     end
 
-    filename = 'todo_daily.txt'
     ([filename, '=' * filename.length, ''] + lines).join("\n")
+
+  end
+  
+  def update_today(file='todo_daily.txt')
+
+    # parse the newest todo_daily.txt file
+    pxtodo = PxTodo.new(file, filepath: @filepath)
+
+    # remove the id attributes
+    px2 = pxtodo.to_px
+    px2.xpath('//todo').each {|x| x.attributes.delete :id}
+    
+    # read the todo_daily_noid file
+    px1noid = Polyrex.new(File.join(@filepath, 'todo_daily_noid.xml'))
+    
+    # compare the 2 documents   
+    doc = RexleDiff.new(px1noid.to_xml, px2.to_xml).to_doc
+    
+    a = doc.xpath('//todo/summary/status[@created]../.')
+    
+    # update the all_todo document    
+    # first we need to find the ids
+    
+    px1 = Polyrex.new(File.join(@filepath, 'todo_daily.xml'))
+    
+    statuses = a.map do |node|
+
+       e = px1.element("//summary[contains(title,'#{node.text('title')}')]")
+       [e.parent.attributes[:id], node.text('status') ]
+      
+    end
+    
+    statuses.each do |id, status|
+      
+      todo = @px.find_by_id id
+      todo.status = status
+      
+    end
 
   end
   
