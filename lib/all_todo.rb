@@ -9,29 +9,35 @@ require 'rexle-diff'
 
 class AllTodo < PxTodo
 
-  def initialize(raw_s, filepath: '.')
+  def initialize(raw_s=nil, filepath: '.')
     
-    super(raw_s, filepath: filepath) do |x|
+    if raw_s then
       
-      todo = x.title
+      super(raw_s, filepath: filepath) do |x|
+        
+        todo = x.title
 
-      # is the to-do item selected for action today?
-      today_item = todo.slice!(/^\*\s+/)      
-      x.when = 'today' if today_item
-      
-      x.title = todo
-      
-    end        
-
+        # is the to-do item selected for action today?
+        today_item = todo.slice!(/^\*\s+/)      
+        x.when = 'today' if today_item
+        
+        x.title = todo
+        
+      end        
+    end
+    
   end
   
+  # generates the all_todo_detail.txt file contents
+  #
   def detail()
     
     lines = []
     
     @px.each_recursive do |item, parent, level, i|
 
-      lines << item.to_h.map {|k,v| "%s%s: %s" % ['  ' * level, k, v]}.join("\n")
+      lines << item.to_h.map \
+          {|k,v| "%s%s: %s" % ['  ' * level, k, v]}.join("\n")
       lines << ['']
       
     end    
@@ -69,12 +75,83 @@ class AllTodo < PxTodo
     pr = PxRowX.new(lines.join)
     pr.to_xml pretty: true    
 
+  end  
+
+  # parses the all_todo_detail.txt file and updates the all_todo_detail.xml file
+  
+  def update_detail()
+    
+    s = File.read File.join(@filepath, 'all_todo_detail.txt')
+    
+    px = Polyrex.new parse_detail(s)
+    results = []
+    
+    px.each_recursive do |x, parent|
+      
+      if x.when.length > 0 then
+
+        basic_xpath = x.node.backtrack.to_xpath
+
+        a = basic_xpath.split('/')
+        a.shift # removes the root node reference
+        
+        s = if parent.heading.length > 0 then
+          "heading='%s'" % parent.heading
+        else
+          "title='%s'" % parent.title
+        end
+        
+        a[-3] << "[summary/#{s}]"
+        a.last << "[summary/title='#{x.title}']"
+        xpath = a.join('/')
+
+        results << [xpath, x.when]
+      end
+    end
+
+    # open the all_todo_detail.xml file
+    
+    xmlfilepath = File.join(@filepath, 'all_todo_detail.xml')
+    
+    # if the file doesn't exist save it and return from the method
+    
+    unless File.exists? xmlfilepath then
+      File.write xmlfilepath, px.to_xml(pretty: true)
+    end
+
+    px2 = Polyrex.new xmlfilepath
+
+    results.each do |xpath, val|
+
+      r = px2.element(xpath + '/summary/when')
+      r2 = px.element(xpath + '/summary/when')
+      next unless r
+
+      a1, a2 = [r.text, val].map {|x| x.split(';').map(&:strip) }
+      
+      # return values which in both a1 and a2
+      r2.text = (a1 | a2).join('; ')
+
+    end
+    
+    # update the all_todo_detail.xml file
+
+    File.write xmlfilepath, px.to_xml(pretty: true)
+
   end
 
   def save(filepath=File.join(@filepath, 'all_todo.xml'))
 
     File.write filepath, @px.to_xml(pretty: true)
-
+    
+    # also update the all_todo.txt  and all_todo_detail.txt
+    
+    File.write File.join(@filepath, 'all_todo.txt'), self.to_s    
+    
+    #update_detail()
+    #File.write File.join(@filepath, 'all_todo_detail.txt'), self.detail
+    'saved'
+    
   end
   
   def to_s()
@@ -103,7 +180,7 @@ class AllTodo < PxTodo
         status = x.status == 'done' ? 'x' : ' '
         
         todo = []
-        todo << '* ' if x.when == 'today'
+        todo << '* ' if x.when =~ /today/
         todo << "%s[%s] %s" % [indent, status, x.title]
         
         lines << '' if i == 0 and parent.heading.length > 0
@@ -166,35 +243,39 @@ class AllTodo < PxTodo
   def update_today(file='todo_daily.txt')
 
     # parse the newest todo_daily.txt file
-    pxtodo = PxTodo.new(file, filepath: @filepath)
+
+    pxtodo = PxTodo.new(file, filepath: @filepath, ignore_headings: true)
 
     # remove the id attributes
     px2 = pxtodo.to_px
     px2.xpath('//todo').each {|x| x.attributes.delete :id}
-    
+
     # read the todo_daily_noid file
     px1noid = Polyrex.new(File.join(@filepath, 'todo_daily_noid.xml'))
-    
+    xml = px1noid.to_xml
+    xml2 = px2.to_xml pretty: true
+
     # compare the 2 documents   
-    doc = RexleDiff.new(px1noid.to_xml, px2.to_xml).to_doc
-    
+    doc = RexleDiff.new(xml, xml2).to_doc
+
     a = doc.xpath('//todo/summary/status[@created]../.')
     
+
     # update the all_todo document    
     # first we need to find the ids
     
     px1 = Polyrex.new(File.join(@filepath, 'todo_daily.xml'))
-    
+
     statuses = a.map do |node|
 
        e = px1.element("//summary[contains(title,'#{node.text('title')}')]")
        [e.parent.attributes[:id], node.text('status') ]
       
     end
-    
+
     statuses.each do |id, status|
       
-      todo = @px.find_by_id id
+      todo = @px.find_by_id id      
       todo.status = status
       
     end
