@@ -7,6 +7,62 @@ require 'px_todo'
 require 'rexle-diff'
 
 
+=begin
+## start of code comments ######################################
+
+how it should work
+==================
+
+Basic usage
+-----------
+
+the user ...
+
+* creates the all_todo.txt (see the sample all_todo.txt file)
+* runs AllTodo#to_s to refresh the all_todo.txt file with checkboxes
+* identifies the todo items for that day by prefixing the item with an
+  asterisk (*)
+* runs AllTodo#export_today to generate the todo_daily.txt file
+* crosses a few todo item checkboxes in the todo_daily.txt file and 
+  saves the file
+* runs AllTodo#update_today to update the completed todo items from the 
+  todo_daily.txt into the all_todo.txt file
+  - all_todo_detail.txt and all_todo_detail.xml is automatically updated
+
+Syncing from all_todo_detail.txt 
+---------------------------------
+
+the user ...
+
+* updates a few *when* fields in all_todo_detail.txt file
+* runs AllTodo#sync_detail which updates the *when* fields in all_todo.xml
+
+--------------------------------------------------
+
+example file
+
+all_todo.txt
+------------
+
+# Projects
+
+## all_todo
+
+[ ] Implement the secret new feature
+[ ] Add a README file
+
+## liveblog
+
+Implement the saving of images from the web locally
+
+# volunteering
+
+* Meeting at Cafe X
+
+## end of code comments ########################################
+=end
+
+
 class AllTodo < PxTodo
 
   def initialize(raw_s=nil, filepath: '.')
@@ -68,29 +124,30 @@ class AllTodo < PxTodo
     
   end
   
+  # parses the all_todo_detail.txt file
+  #
   def parse_detail(s)
     
     lines = s.lines
     lines.shift 3
-    pr = PxRowX.new(lines.join)
+
+    pr = PxRowX.new(lines.join, record_name: 'todo')
     pr.to_xml pretty: true    
 
-  end  
+  end
 
-  # parses the all_todo_detail.txt file and updates the all_todo_detail.xml file
   
-  def update_detail()
+  # synchronises the when field
+  #
+  def sync(px, px2)
     
-    s = File.read File.join(@filepath, 'all_todo_detail.txt')
-    
-    px = Polyrex.new parse_detail(s)
     results = []
     
     px.each_recursive do |x, parent|
       
       if x.when.length > 0 then
 
-        basic_xpath = x.node.backtrack.to_xpath
+        basic_xpath = x.node.backtrack(use_attributes: false).to_xpath
 
         a = basic_xpath.split('/')
         a.shift # removes the root node reference
@@ -108,35 +165,45 @@ class AllTodo < PxTodo
         results << [xpath, x.when]
       end
     end
-
-    # open the all_todo_detail.xml file
-    
-    xmlfilepath = File.join(@filepath, 'all_todo_detail.xml')
-    
-    # if the file doesn't exist save it and return from the method
-    
-    unless File.exists? xmlfilepath then
-      File.write xmlfilepath, px.to_xml(pretty: true)
-    end
-
-    px2 = Polyrex.new xmlfilepath
-
+        
     results.each do |xpath, val|
 
       r = px2.element(xpath + '/summary/when')
       r2 = px.element(xpath + '/summary/when')
       next unless r
 
-      a1, a2 = [r.text, val].map {|x| x.split(';').map(&:strip) }
+      a1, a2 = [r.text, val].map {|x| x.to_s.split(';').map(&:strip) }
       
       # return values which in both a1 and a2
-      r2.text = (a1 | a2).join('; ')
+      r.text = (a1 | a2).join('; ')
 
     end
     
-    # update the all_todo_detail.xml file
+    
+  end
 
-    File.write xmlfilepath, px.to_xml(pretty: true)
+  
+  def sync_all_todo()    
+  
+    # given all_todo.txt is loaded
+    # load the master copy (all_todo.xml)
+
+    px = Polyrex.new File.join(@filepath, 'all_todo.xml')  
+    
+    sync px, @px
+    
+  end
+  
+  
+  # synchronises the all_todo_detail.txt file and updates the *when* field in 
+  # the all_todo.xml file
+  #
+  def sync_detail()
+    
+    s = File.read File.join(@filepath, 'all_todo_detail.txt')
+    
+    px = Polyrex.new parse_detail(s)
+    sync px, @px
 
   end
 
@@ -146,10 +213,9 @@ class AllTodo < PxTodo
     
     # also update the all_todo.txt  and all_todo_detail.txt
     
-    File.write File.join(@filepath, 'all_todo.txt'), self.to_s    
-    
-    #update_detail()
-    #File.write File.join(@filepath, 'all_todo_detail.txt'), self.detail
+    File.write File.join(@filepath, 'all_todo.txt'), self.to_s        
+    File.write File.join(@filepath, 'all_todo_detail.txt'), self.detail
+
     'saved'
     
   end
