@@ -209,11 +209,24 @@ class AllTodo < PxTodo
 
   def save(filepath=File.join(@filepath, 'all_todo.xml'))
 
-    File.write filepath, @px.to_xml(pretty: true)
+    File.write filepath, self.to_px.to_xml(pretty: true)
     
     # also update the all_todo.txt  and all_todo_detail.txt
     
+    # make a backup of the master copy (all_todo.txt) first
+    if File.exists? File.join(@filepath, 'all_todo.txt') then
+      FileUtils.cp File.join(@filepath, 'all_todo.txt'), 
+          File.join(@filepath, 'all_todo.txt~')
+    end
+    
     File.write File.join(@filepath, 'all_todo.txt'), self.to_s        
+    
+    # backup the detail first
+    if File.exists? File.join(@filepath, 'all_todo_detail.txt') then
+      FileUtils.cp File.join(@filepath, 'all_todo_detail.txt'), 
+          File.join(@filepath, 'all_todo_detail.txt~')
+    end
+    
     File.write File.join(@filepath, 'all_todo_detail.txt'), self.detail
 
     'saved'
@@ -335,12 +348,13 @@ class AllTodo < PxTodo
     statuses = a.map do |node|
 
        e = px1.element("//summary[contains(title,'#{node.text('title')}')]")
+
        [e.parent.attributes[:id], node.text('status') ]
       
     end
 
     statuses.each do |id, status|
-      
+
       todo = @px.find_by_id id      
       todo.status = status
       
